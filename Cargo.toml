@@ -1,0 +1,6 @@
+[package]
+name = "url-shorting-service-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
