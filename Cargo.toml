@@ -9,3 +9,4 @@ serde_json = "1.0"
 actix-web = "4.0"
 dotenv = "0.15"
 lazy_static = "1.4"
+mysql = { version = "26.0.0"}

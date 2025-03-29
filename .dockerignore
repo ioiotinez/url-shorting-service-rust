@@ -1,0 +1,17 @@
+# Ignore the target directory created by Cargo
+target/
+
+# Ignore the Cargo.lock file
+Cargo.lock
+
+# Ignore the Dockerfile and init.sql in the docker directory
+docker/Dockerfile
+docker/init.sql
+
+# Ignore any local configuration files
+*.rs.bk
+*.rs.swp
+
+# Ignore any IDE-specific files
+.vscode/
+.idea/
