@@ -1,9 +1,28 @@
-use actix_web::{delete, get, post, put, web, App, HttpServer, Responder};
-use mysql_async::Pool;
+use actix_web::{delete, get, post, put, web, App, HttpResponse, HttpServer, Responder};
+use chrono::{DateTime, Utc};
+use sqlx::mysql::MySqlPoolOptions;
+use sqlx::FromRow;
+use sqlx::MySqlPool;
+use std::env;
+use uuid::Uuid;
 
-#[get("/")]
-async fn index() -> impl Responder {
-    "Hello world!"
+// Estado de la aplic.ación
+struct AppState {
+    db_pool: MySqlPool,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, FromRow)]
+struct ShortUrl {
+    id: i32,
+    original_url: String,
+    short_code: String,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+#[get("/health")]
+async fn health_check() -> impl Responder {
+    HttpResponse::Ok().body("Servicio funcionando correctamente")
 }
 
 /*
@@ -12,31 +31,27 @@ Va a recibir dentro del body de la llamada una url.
 Va a devolver un json con la url original y un codigo short. Tambien va a retornar un Id y la fecha de creacion y actualizacion
 */
 #[post("/shorten")]
-async fn index_post(pool: web::Data<Pool>) -> impl Responder {
-    conn = pool.get_conn().await.unwrap();
+async fn index_post(data: web::Data<AppState>, body: web::Json<ShortUrl>) -> impl Responder {
+    // Extract the ShortUrl from the request body
+    let short_url = body.into_inner();
 
-    // Obtener el body de la llamada
-    let body = web::Json::<String>::from_request(&req, &mut payload).await.unwrap();
-    let url = body.into_inner();
+    // Insert into db
+    let result = sqlx::query!(
+        "INSERT INTO urls (original_url, short_code) VALUES (?, ?)",
+        short_url.original_url,
+        uuid::Uuid::new_v4().to_string()
+    )
+    .execute(&data.db_pool)
+    .await
+    .expect("Error al insertar el short url");
 
-    // Validar la url
-    if !url.starts_with("http://") && !url.starts_with("https://") {
-        return HttpResponse::BadRequest().body("La url no es valida");
-    }
-    // Crear el short code
-    let short_code = uuid::Uuid::new_v4().to_string();
-    // Guardar la url y el short code en la base de datos
-    let query = format!("INSERT INTO urls (url, short_code) VALUES ('{}', '{}')", url, short_code);
-    conn.query_drop(query).await.unwrap();
-
-    HttpResponse::Ok().json(json!({
-        "url": url,
-        "short_code": short_code,
-        "id": 1,
-        "created_at": "2023-01-01 00:00:00",
-        "updated_at": "2023-01-01 00:00:00"
-    }))
-    
+    HttpResponse::Created().json(ShortUrl {
+        id: result.last_insert_id() as i32,
+        original_url: short_url.original_url.clone(),
+        short_code: short_url.short_code.clone(),
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    })
 }
 
 /*
@@ -46,8 +61,8 @@ Va a recibir dentro del body de la llamada una url.
 Va a devolver un json con la url original y un codigo short. Tambien va a retornar un Id y la fecha de creacion y actualizacion
 */
 #[put("/shorten/{short}")]
-async fn index_put() -> impl Responder {
-    "Hello world!"
+async fn index_put(short: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+    HttpResponse::Ok().body(format!("Short code: {}", short.into_inner()))
 }
 
 /*
@@ -56,21 +71,22 @@ Va a recibir un parametro en la url que va a ser el short code.
 Va a devolver un redirect a la url original.
 */
 #[get("/shorten/{short}")]
-async fn index_shorten() -> impl Responder {
-    // Obtener el short code de la url
-    let short_code = web::Path::<String>::from_request(&req, &mut payload).await.unwrap();
-    // Obtener la url original de la base de datos
-    let query = format!("SELECT url FROM urls WHERE short_code = '{}'", short_code);
-    let result = conn.query_first(query).await.unwrap();
-    // Si no se encuentra la url original, devolver un error 404
-    if result.is_none() {
-        return HttpResponse::NotFound().body("No se encontro la url");
-    }
-    let url = result.unwrap();
+async fn index_shorten(short: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+    let short_code = short.into_inner();
 
-    // Redirigir a la url original
+    let short = sqlx::query!(
+       "SELECT id, original_url, short_code, created_at, updated_at FROM urls WHERE short_code = ?",
+       short_code
+   )
+    .fetch_one(&data.db_pool)
+    .await
+    .expect("Error al buscar el short code");
+
+    // Redirect to original URL from short
+    let original_url = short.original_url.clone();
+
     HttpResponse::Found()
-        .header("Location", url)
+        .append_header(("Location", original_url))
         .finish()
 }
 
@@ -82,30 +98,45 @@ async fn index_delete() -> impl Responder {
     "Hello world!"
 }
 
-
 #[get("/shorten/{short}/stats")]
 async fn index_stats() -> impl Responder {
     "Hello world!"
 }
 
-#[actix_web::main]  
-async fn main() -> std::io::Result<()>{
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
     dotenv::dotenv().ok();
-    mysql::init_pool().await.unwrap();
-    let pool = mysql::get_pool().await.unwrap();
-    
-    let pool_data = web::Data::new(pool);
 
-    HttpServer::new(||
+    let database_url =
+        env::var("DATABASE_URL").expect("DATABASE_URL debe estar configurada en .env");
+
+    let pool = MySqlPoolOptions::new()
+        .max_connections(5)
+        .connect(&database_url)
+        .await
+        .expect("Error al crear el pool de conexiones");
+
+    // Verificar la conexión
+    sqlx::query("SELECT 1")
+        .execute(&pool)
+        .await
+        .expect("Error al verificar la conexión a la base de datos");
+
+    println!("✅ Conexión a MySQL establecida correctamente");
+
+    HttpServer::new(move || {
         App::new()
-            .app_data(pool_data.clone())
+            .app_data(web::Data::new(AppState {
+                db_pool: pool.clone(),
+            }))
+            .service(health_check)
             .service(index_shorten)
             .service(index_delete)
             .service(index_stats)
             .service(index_put)
             .service(index_post)
-            .service(index))
-            .bind("127.0.0.1:8080")?
-            .run()
-            .await
+    })
+    .bind("127.0.0.1:8080")?
+    .run()
+    .await
 }

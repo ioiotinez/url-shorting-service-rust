@@ -3,7 +3,7 @@
 
 # Build the Docker image
 echo "Building the Docker image..."
-docker build -t url-shortening-mysql ./docker
+docker build -t url-shortening-mysql -f Dockerfile .
 
 # Run the Docker container
 echo "Starting the MySQL container..."
