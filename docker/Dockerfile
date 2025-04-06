@@ -1,11 +1,11 @@
-FROM mysql:latest
+FROM mysql
 
+# Variables de entorno para MySQL
 ENV MYSQL_ROOT_PASSWORD=root_password
 ENV MYSQL_DATABASE=url_shortening_service
 
-COPY init.sql /docker-entrypoint-initdb.d/
+# Exponer el puerto 3306 para que sea accesible desde localhost
+EXPOSE 3306
 
-#Execute the SQL script to create the database and tables
-RUN ["mysql", "-u", "root", "-p$MYSQL_ROOT_PASSWORD", "$MYSQL_DATABASE", "<", "/docker-entrypoint-initdb.d/init.sql"]
-
-CMD ["mysqld"]
+# Definir un volumen para los datos de MySQL
+VOLUME /var/lib/mysql

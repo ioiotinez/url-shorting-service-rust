@@ -1,6 +1,5 @@
 use actix_web::{delete, get, post, put, web, App, HttpResponse, HttpServer, Responder};
-use chrono::{DateTime, Utc};
-use chrono::NaiveDateTime;
+use chrono::{Utc, DateTime};
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::FromRow;
 use sqlx::MySqlPool;
@@ -16,10 +15,9 @@ struct ShortUrl {
     id: i32,
     original_url: String,
     short_code: String,
-    #[sqlx(try_from = "sqlx::types::chrono::NaiveDateTime")]
-    created_at: NaiveDateTime,
-    #[sqlx(try_from = "sqlx::types::chrono::NaiveDateTime")]
-    updated_at: NaiveDateTime,
+    created_at: Option<DateTime<Utc>>,
+    updated_at: Option<DateTime<Utc>>,
+    access_count: i32,
 }
 
 #[derive(serde::Deserialize)]
@@ -59,8 +57,9 @@ async fn index_post(data: web::Data<AppState>, body: web::Json<ShortUrlRequest>)
         id: result.last_insert_id() as i32,
         original_url: short_url_request.url,
         short_code,
-        created_at: Utc::now().naive_utc(),
-        updated_at: Utc::now().naive_utc(),
+        created_at: Some(Utc::now()),
+        updated_at: Some(Utc::now()),
+        access_count: 0,
     })
 }
 
@@ -89,7 +88,7 @@ async fn index_put(short: web::Path<String>, body: web::Json<ShortUrlRequest>, d
         // Get from db
         let result = sqlx::query_as!(
             ShortUrl,
-            "SELECT id, original_url, short_code, created_at, updated_at FROM urls WHERE short_code = ?",
+            "SELECT id, original_url, short_code, created_at, updated_at, access_count FROM urls WHERE short_code = ?",
             short_code
         )
         .fetch_one(&data.db_pool)
