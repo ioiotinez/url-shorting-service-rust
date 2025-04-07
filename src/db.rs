@@ -3,7 +3,8 @@ use sqlx::MySqlPool;
 use std::env;
 
 pub async fn create_pool() -> MySqlPool {
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL debe estar configurada en .env");
+    let database_url =
+        env::var("DATABASE_URL").expect("DATABASE_URL debe estar configurada en .env");
 
     let pool = MySqlPoolOptions::new()
         .max_connections(5)

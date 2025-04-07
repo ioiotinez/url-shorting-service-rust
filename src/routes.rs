@@ -1,7 +1,7 @@
+use crate::models::{AppState, ShortUrl, ShortUrlRequest};
 use actix_web::{delete, get, post, put, web, HttpResponse, Responder};
 use chrono::Utc;
 use uuid::Uuid;
-use crate::models::{AppState, ShortUrl, ShortUrlRequest};
 
 #[get("/health")]
 pub async fn health_check() -> impl Responder {
@@ -9,7 +9,10 @@ pub async fn health_check() -> impl Responder {
 }
 
 #[post("/shorten")]
-pub async fn index_post(data: web::Data<AppState>, body: web::Json<ShortUrlRequest>) -> impl Responder {
+pub async fn index_post(
+    data: web::Data<AppState>,
+    body: web::Json<ShortUrlRequest>,
+) -> impl Responder {
     let short_url_request = body.into_inner();
     let short_code = Uuid::new_v4().to_string()[..4].to_string();
 
@@ -33,7 +36,11 @@ pub async fn index_post(data: web::Data<AppState>, body: web::Json<ShortUrlReque
 }
 
 #[put("/shorten/{short}")]
-pub async fn index_put(short: web::Path<String>, body: web::Json<ShortUrlRequest>, data: web::Data<AppState>) -> impl Responder {
+pub async fn index_put(
+    short: web::Path<String>,
+    body: web::Json<ShortUrlRequest>,
+    data: web::Data<AppState>,
+) -> impl Responder {
     let short_code = short.into_inner();
     let short_url_request = body.into_inner();
 
@@ -93,13 +100,10 @@ pub async fn index_shorten(short: web::Path<String>, data: web::Data<AppState>) 
 pub async fn index_delete(short: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
     let short_code = short.into_inner();
 
-    let result = sqlx::query!(
-        "DELETE FROM urls WHERE short_code = ?",
-        short_code
-    )
-    .execute(&data.db_pool)
-    .await
-    .expect("Error al eliminar el short url");
+    let result = sqlx::query!("DELETE FROM urls WHERE short_code = ?", short_code)
+        .execute(&data.db_pool)
+        .await
+        .expect("Error al eliminar el short url");
 
     if result.rows_affected() > 0 {
         HttpResponse::Ok().body(format!("Short code {} eliminado", short_code))
