@@ -118,6 +118,15 @@ async fn index_shorten(short: web::Path<String>, data: web::Data<AppState>) -> i
     .await
     .expect("Error al buscar el short code");
 
+    // Increment access count
+    sqlx::query!(
+        "UPDATE urls SET access_count = access_count + 1 WHERE short_code = ?",
+        short_code
+    )
+    .execute(&data.db_pool)
+    .await
+    .expect("Error al actualizar el access count");
+
     // Redirect to original URL from short
     let original_url = short.original_url.clone();
 
@@ -150,8 +159,20 @@ async fn index_delete(short: web::Path<String>, data: web::Data<AppState>) -> im
 }
 
 #[get("/shorten/{short}/stats")]
-async fn index_stats() -> impl Responder {
-    "Hello world!"
+async fn index_stats(short: web::Path<String>, data: web::Data<AppState>) -> impl Responder {
+    let short_code = short.into_inner();
+
+    // Get from db
+    let result = sqlx::query_as!(
+        ShortUrl,
+        "SELECT id, original_url, short_code, created_at, updated_at, access_count FROM urls WHERE short_code = ?",
+        short_code
+    )
+    .fetch_one(&data.db_pool)
+    .await
+    .expect("Error al buscar el short code");
+
+    HttpResponse::Ok().json(result)
 }
 
 #[actix_web::main]
